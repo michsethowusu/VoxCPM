@@ -4485,7 +4485,8 @@ with gr.Blocks(title="Ghana TTS") as demo:
     tag.change(on_prompt_change, inputs=[tag], outputs=[prompt_audio])
     rand_btn.click(on_language_change, inputs=[tag], outputs=[text])
     btn.click(synthesize, inputs=[text, tag, prompt_audio, survey_state], outputs=[audio, status, survey_html, survey_state])
-    submit_btn.click(submit_ratings, inputs=[ratings_data, survey_state], outputs=[submit_status, survey_html, survey_state])
+    submit_btn.click(submit_ratings, inputs=[ratings_data, survey_state], outputs=[submit_status, survey_html, survey_state],
+        js="(r, s) => { var ratings={}; document.querySelectorAll('.star-rating input:checked').forEach(function(el) { var id = el.name.split('_')[1]; ratings[id] = parseInt(el.value); }); return [JSON.stringify(ratings), s]; }")
     clear_btn.click(lambda: ("Cleared.", build_survey_html([]), []), outputs=[submit_status, survey_html, survey_state])
     demo.load(on_language_change, inputs=tag, outputs=[text])
     demo.load(on_prompt_change, inputs=tag, outputs=[prompt_audio])
