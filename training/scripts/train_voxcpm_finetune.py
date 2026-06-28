@@ -110,14 +110,25 @@ def train(
 
     if train_manifest == "ghana-latents":
         # Precomputed VoxCPM AudioVAE latents (parquet): feat + tagged text + dataset_id + split.
-        import glob as _glob
-        from datasets import load_dataset as _ld
-        _ldir = os.environ.get("GHANA_LATENTS_DIR", "/mnt/volume_d2wey28/data/voxcpm-latents")
-        _files = sorted(_glob.glob(_ldir + "/*.parquet"))
-        _ds = _ld("parquet", data_files=_files, split="train")
-        train_ds = _ds.filter(lambda r: r["split"] == "train")
-        val_ds = _ds.filter(lambda r: r["split"] == "dev")
-        print(f"[ghana-latents] train={len(train_ds)} val={len(val_ds)}", file=sys.stderr)
+        # Check for pre-cached (tokenized) dataset first.
+        import os as _os
+        _cached = "/mnt/volume_d2wey28/data/voxcpm-latents-cached"
+        _train_cache = _os.path.join(_cached, "train")
+        _dev_cache = _os.path.join(_cached, "dev")
+        if _os.path.isdir(_train_cache) and _os.path.isdir(_dev_cache):
+            from datasets import load_from_disk as _lfd
+            train_ds = _lfd(_train_cache)
+            val_ds = _lfd(_dev_cache)
+            print(f"[ghana-latents] loaded cached: train={len(train_ds)} val={len(val_ds)}", file=sys.stderr)
+        else:
+            import glob as _glob
+            from datasets import load_dataset as _ld
+            _ldir = _os.environ.get("GHANA_LATENTS_DIR", "/mnt/volume_d2wey28/data/voxcpm-latents")
+            _files = sorted(_glob.glob(_ldir + "/*.parquet"))
+            _ds = _ld("parquet", data_files=_files, split="train")
+            train_ds = _ds.filter(lambda r: r["split"] == "train")
+            val_ds = _ds.filter(lambda r: r["split"] == "dev")
+            print(f"[ghana-latents] train={len(train_ds)} val={len(val_ds)}", file=sys.stderr)
     elif train_manifest == "ghana-parquet":
         # Ghana 42-lang + filtered-English run: tagged transcripts + balanced dev,
         # built directly from parquet (see voxcpm_ghana_data.build).
@@ -133,16 +144,27 @@ def train(
             sample_rate=sample_rate,
         )
 
+    # Tokenize text (skip if cached dataset already has text_ids)
     def tokenize(batch):
         text_list = batch["text"]
         text_ids = [tokenizer(text) for text in text_list]
         return {"text_ids": text_ids}
 
-    train_ds = train_ds.map(tokenize, batched=True, remove_columns=["text"])
-    # Save original validation texts for audio generation display
-    val_texts = None
-    if val_ds is not None:
-        val_texts = list(val_ds["text"])  # Save original texts
+    if "text_ids" not in train_ds.column_names:
+        train_ds = train_ds.map(tokenize, batched=True, remove_columns=["text"])
+        # Save original validation texts for audio generation display
+        val_texts = None
+        if val_ds is not None:
+            val_texts = list(val_ds["text"])  # Save original texts
+    else:
+        # Already tokenized (cached); reconstruct val_texts from text_ids for audio gen
+        val_texts = None
+        if val_ds is not None:
+            _raw = val_ds["text_ids"]
+            val_texts = [tokenizer.tokenizer.decode(list(t), skip_special_tokens=False) for t in _raw]
+
+    # Tokenize val_ds (if tokenization not already done)
+    if val_ds is not None and "text_ids" not in val_ds.column_names:
         val_ds = val_ds.map(tokenize, batched=True, remove_columns=["text"])
 
     dataset_cnt = int(max(train_ds["dataset_id"])) + 1 if "dataset_id" in train_ds.column_names else 1
@@ -155,15 +177,21 @@ def train(
     #   Samples exceeding this length will be dropped
     # ------------------------------------------------------------------ #
     if max_batch_tokens and max_batch_tokens > 0:
-        from voxcpm.training.data import compute_sample_lengths
-
-        audio_vae_fps = base_model.audio_vae.sample_rate / base_model.audio_vae.hop_length
-        est_lengths = compute_sample_lengths(
-            train_ds,
-            audio_vae_fps=audio_vae_fps,
-            patch_size=base_model.config.patch_size,
-        )
-        max_sample_len = max_batch_tokens // batch_size if batch_size > 0 else max(est_lengths)
+        max_sample_len = max_batch_tokens // batch_size if batch_size > 0 else 0
+        # Latent dataset has feat_t directly; no need to decode audio
+        if "feat_t" in train_ds.column_names:
+            text_lens = [len(t) for t in train_ds["text_ids"]]
+            feat_ts = train_ds["feat_t"]
+            _patch = base_model.config.patch_size
+            est_lengths = [len_t + (ft + _patch - 1) // _patch + 2 for len_t, ft in zip(text_lens, feat_ts)]
+        else:
+            from voxcpm.training.data import compute_sample_lengths
+            audio_vae_fps = base_model.audio_vae.sample_rate / base_model.audio_vae.hop_length
+            est_lengths = compute_sample_lengths(
+                train_ds,
+                audio_vae_fps=audio_vae_fps,
+                patch_size=base_model.config.patch_size,
+            )
         keep_indices = [i for i, L in enumerate(est_lengths) if L <= max_sample_len]
 
         if len(keep_indices) < len(train_ds) and accelerator.rank == 0:

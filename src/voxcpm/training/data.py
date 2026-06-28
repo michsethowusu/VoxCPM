@@ -131,12 +131,24 @@ class HFVoxCPMDataset(TorchDataset):
     def __init__(self, dataset: Dataset):
         self.dataset = dataset
         self.has_ref_audio = DEFAULT_REF_AUDIO_COLUMN in dataset.column_names
+        # precomputed-latent mode: dataset carries fp16 VAE feats instead of audio
+        self.is_latent = "feat" in dataset.column_names
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx: int):
         item = self.dataset[idx]
+        if self.is_latent:
+            import numpy as np
+            feat = np.frombuffer(item["feat"], dtype=np.float16).reshape(int(item["feat_t"]), -1)
+            return {
+                "text_ids": item["text_ids"],
+                "audio_array": feat.astype(np.float32),  # 2D [T', D] latent
+                "audio_sampling_rate": 16000,
+                "dataset_id": item.get(DEFAULT_ID_COLUMN, 0),
+                "is_prompt": item.get("is_prompt", False),
+            }
         audio = item[DEFAULT_AUDIO_COLUMN]
         sample = {
             "text_ids": item["text_ids"],
@@ -165,18 +177,25 @@ class HFVoxCPMDataset(TorchDataset):
 
     @classmethod
     def collate_fn(cls, batch: List[Dict]):
+        import numpy as np
         text_tensors = [torch.tensor(sample["text_ids"], dtype=torch.int32) for sample in batch]
-        audio_tensors = [torch.tensor(sample["audio_array"], dtype=torch.float32) for sample in batch]
         dataset_ids = torch.tensor([sample["dataset_id"] for sample in batch], dtype=torch.int32)
         is_prompts = [bool(sample.get("is_prompt", False)) for sample in batch]
-
         text_padded = cls.pad_sequences(text_tensors, pad_value=-100)
-        audio_padded = cls.pad_sequences(audio_tensors, pad_value=-100.0)
         task_ids = torch.ones(text_padded.size(0), dtype=torch.int32)
+
+        # Precomputed latents ([T', D]) are passed as a LIST (exact length, no padding);
+        # raw waveforms (1D) are padded into a tensor as before.
+        is_latent = np.asarray(batch[0]["audio_array"]).ndim == 2
+        if is_latent:
+            audio_tokens = [torch.as_tensor(np.asarray(s["audio_array"]), dtype=torch.float32) for s in batch]
+        else:
+            audio_tensors = [torch.tensor(sample["audio_array"], dtype=torch.float32) for sample in batch]
+            audio_tokens = cls.pad_sequences(audio_tensors, pad_value=-100.0)
 
         result = {
             "text_tokens": text_padded,
-            "audio_tokens": audio_padded,
+            "audio_tokens": audio_tokens,
             "task_ids": task_ids,
             "dataset_ids": dataset_ids,
             "is_prompts": is_prompts,
@@ -187,6 +206,65 @@ class HFVoxCPMDataset(TorchDataset):
             result["ref_audio_tokens"] = cls.pad_sequences(ref_tensors, pad_value=-100.0)
 
         return result
+
+
+class _LatentVAEShim:
+    """Stand-in for AudioVAE used only to construct the packer inside DataLoader
+    workers for the precomputed-latent path. That path never calls the VAE
+    (``encode_audio`` passes 2D feats straight through and ``patch_len`` is
+    unused), so these values are inert; they mirror VoxCPM-0.5B (hop=640, 16kHz)
+    for completeness."""
+
+    hop_length = 640
+    sample_rate = 16_000
+
+
+# Per-worker-process lazy packer singleton (avoids pickling the packer; only the
+# small config tuple crosses the process boundary inside _LatentPackCollate).
+_LATENT_PACKER = None
+_LATENT_PACKER_KEY = None
+
+
+def _get_latent_packer(dataset_cnt: int, max_len: int, patch_size: int, feat_dim: int):
+    global _LATENT_PACKER, _LATENT_PACKER_KEY
+    key = (dataset_cnt, max_len, patch_size, feat_dim)
+    if _LATENT_PACKER is None or _LATENT_PACKER_KEY != key:
+        _LATENT_PACKER = AudioFeatureProcessingPacker(
+            dataset_cnt=dataset_cnt,
+            max_len=max_len,
+            patch_size=patch_size,
+            feat_dim=feat_dim,
+            audio_vae=_LatentVAEShim(),
+        )
+        _LATENT_PACKER_KEY = key
+    return _LATENT_PACKER
+
+
+class _LatentPackCollate:
+    """Collate that builds the FULL packed batch on CPU inside each DataLoader
+    worker — parallelised across workers and overlapped with GPU compute via
+    prefetch. The main process then only transfers the packed tensors to GPU.
+
+    This replaces the previous flow where packing ran serially in the main
+    process on the GPU: ~1k tiny CUDA kernels per step (one per sample × per
+    tensor op) plus host syncs starved the GPU to 0-3% utilisation. The packer
+    is pure tensor reshaping/masking, so running it on CPU is bit-identical and
+    far cheaper (no kernel-launch or sync overhead). Picklable (only ints)."""
+
+    def __init__(self, dataset_cnt: int, max_len: int, patch_size: int, feat_dim: int):
+        self.cfg = (int(dataset_cnt), int(max_len), int(patch_size), int(feat_dim))
+
+    def __call__(self, batch: List[Dict]):
+        base = HFVoxCPMDataset.collate_fn(batch)
+        packer = _get_latent_packer(*self.cfg)
+        return packer(
+            audio_tokens=base["audio_tokens"],
+            text_tokens=base["text_tokens"],
+            task_ids=base["task_ids"],
+            dataset_ids=base["dataset_ids"],
+            is_prompts=base["is_prompts"],
+            ref_audio_tokens=base.get("ref_audio_tokens"),
+        )
 
 
 class BatchProcessor:
@@ -216,7 +294,15 @@ class BatchProcessor:
         )
 
     def __call__(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        audio_tokens = batch["audio_tokens"].to(self.device)
+        # Latent path: the batch was already packed in the DataLoader workers
+        # (see _LatentPackCollate). Just move the packed tensors to the device.
+        if "audio_feats" in batch:
+            return {
+                k: (v.to(self.device, non_blocking=True) if isinstance(v, torch.Tensor) else v)
+                for k, v in batch.items()
+            }
+        _at = batch["audio_tokens"]
+        audio_tokens = [t.to(self.device) for t in _at] if isinstance(_at, list) else _at.to(self.device)
         text_tokens = batch["text_tokens"].to(self.device)
         task_ids = batch["task_ids"].to(self.device)
         dataset_ids = batch["dataset_ids"].to(self.device)
@@ -243,14 +329,21 @@ def build_dataloader(
     batch_size: int,
     num_workers: int,
     drop_last: bool = False,
+    pack_config: Optional[dict] = None,
 ) -> torch.utils.data.DataLoader:
     torch_dataset = HFVoxCPMDataset(hf_dataset)
+    # Precomputed-latent path: pack the batch inside the workers (parallel +
+    # overlapped) instead of serially on the GPU in the main process.
+    if torch_dataset.is_latent and pack_config is not None:
+        collate_fn = _LatentPackCollate(**pack_config)
+    else:
+        collate_fn = HFVoxCPMDataset.collate_fn
     # Standard padding-based batching; Accelerator will attach DistributedSampler if needed.
     return accelerator.prepare_dataloader(
         torch_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=True,
-        collate_fn=HFVoxCPMDataset.collate_fn,
+        collate_fn=collate_fn,
         drop_last=drop_last,
     )

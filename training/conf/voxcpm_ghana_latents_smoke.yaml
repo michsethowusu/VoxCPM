@@ -1,0 +1,22 @@
+pretrained_path: /mnt/volume_d2wey28/models/VoxCPM-0.5B
+train_manifest: ghana-latents
+val_manifest: ""
+sample_rate: 16000
+batch_size: 32
+grad_accum_steps: 1
+num_workers: 8
+num_iters: 20
+log_interval: 50
+valid_interval: 1000
+save_interval: 100
+learning_rate: 0.00001
+weight_decay: 0.01
+warmup_steps: 2
+max_steps: 20
+max_batch_tokens: 0
+max_grad_norm: 1.0
+save_path: /mnt/volume_d2wey28/projects/voxcpm-ghana/checkpoints_smoke
+tensorboard: /mnt/volume_d2wey28/projects/voxcpm-ghana/logs
+lambdas:
+  loss/diff: 1.0
+  loss/stop: 1.0

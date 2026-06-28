@@ -45,6 +45,9 @@ class AudioFeatureProcessingPacker:
         return tokens if pad_pos is None else tokens[:pad_pos]
 
     def unpad_audio_tokens(self, tokens: torch.Tensor):
+        # Precomputed-latent path: a 2D [T', D] feat is exact-length (never padded).
+        if tokens.dim() >= 2:
+            return tokens
         pad_pos = self._first_pad_position(tokens)
         return tokens if pad_pos is None else tokens[:pad_pos]
 
@@ -54,7 +57,12 @@ class AudioFeatureProcessingPacker:
 
         AudioVAE.encode expects shape [B, 1, T'] and returns [B, D, T].
         We then transpose to [B, T, D] to match downstream expectations.
+
+        Precomputed-latent path: if ``wav`` is already a 2D [T', D] latent,
+        pass it through as [1, T', D] (skip the VAE).
         """
+        if wav.dim() == 2:
+            return wav.unsqueeze(0).to(torch.float32)
         wav = wav.unsqueeze(0)  # [1, T]
         wav = wav.unsqueeze(1)  # [1, 1, T]
         wav_len = wav.size(-1)
@@ -88,7 +96,10 @@ class AudioFeatureProcessingPacker:
         samples whose unpadded ref_audio length > 0 will be processed with the
         reference-audio path (tokens 103/104 prepended, loss only on target audio).
         """
-        device = audio_tokens.device
+        # audio_tokens may be a padded tensor [B, T] (waveform path) or a list of
+        # per-sample [T', D] latents (precomputed-latent path).
+        device = (audio_tokens[0] if isinstance(audio_tokens, list) else audio_tokens).device
+        n_audio = len(audio_tokens)
         max_dataset_id = int(dataset_ids.max().item()) if dataset_ids.numel() > 0 else -1
         dataset_cnt = max(self.dataset_cnt, max_dataset_id + 1)
 
@@ -105,7 +116,7 @@ class AudioFeatureProcessingPacker:
         audio_duration_consumed = torch.zeros(dataset_cnt, dtype=torch.float32, device=device)
         text_token_consumed = torch.zeros(dataset_cnt, dtype=torch.float32, device=device)
 
-        ref_iter = ref_audio_tokens if ref_audio_tokens is not None else [None] * audio_tokens.size(0)
+        ref_iter = ref_audio_tokens if ref_audio_tokens is not None else [None] * n_audio
 
         for audio_token, text_token, task_id, dataset_idx, is_prompt, ref_token in zip(
             audio_tokens, text_tokens, task_ids.tolist(), dataset_ids.tolist(), is_prompts, ref_iter
