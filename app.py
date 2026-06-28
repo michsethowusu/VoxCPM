@@ -4359,31 +4359,31 @@ def build_survey_html(survey):
     for e in survey:
         audio_tag = f'<audio controls src="data:audio/wav;base64,{e["audio_b64"]}" style="width:100%;"></audio>'
         prompt_label = f" + prompt" if e.get("prompt") and e["prompt"] != "None" else ""
-        stars = "".join(
-            f'<input type="radio" name="star_{e["id"]}" id="s{e["id"]}_{v}" value="{v}"'
-            f' onchange="updateRating({e["id"]},{v})"{" checked" if e["rating"]==v else ""}>'
-            f'<label for="s{e["id"]}_{v}">★</label>'
-            for v in range(5, 0, -1)
-        )
+        rid = e["id"]
+        sel = e.get("rating", 0)
+        up_active = " active" if sel == 1 else ""
+        down_active = " active" if sel == -1 else ""
         rows.append(
             f"<tr><td><b>{e['lang_name']}</b><br><small>{e['lang']}{prompt_label}</small></td>"
             f"<td style='max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' title='{e['text']}'>{e['text'][:50]}{'…' if len(e['text'])>50 else ''}</td>"
             f"<td style='width:180px;'>{audio_tag}</td>"
-            f"<td style='white-space:nowrap;'><div class='star-rating'>{stars}</div></td></tr>"
+            f"<td style='white-space:nowrap; text-align:center;'>"
+            f"<span class='thumb thumb-up{up_active}' onclick='rate({rid},1)' data-id='{rid}'>👍</span>"
+            f"<span class='thumb thumb-down{down_active}' onclick='rate({rid},-1)' data-id='{rid}'>👎</span>"
+            f"</td></tr>"
         )
     return f"""
 <style>
 .survey-table td, .survey-table th {{ padding:8px 10px; border-bottom:1px solid #e5e7eb; text-align:left; vertical-align:middle; }}
 .survey-table th {{ background:#f3f4f6; font-weight:600; }}
-.star-rating {{ display:inline-flex; flex-direction:row-reverse; gap:1px; }}
-.star-rating input {{ display:none; }}
-.star-rating label {{ cursor:pointer; font-size:24px; color:#d1d5db; transition:color .15s; }}
-.star-rating input:checked ~ label, .star-rating label:hover, .star-rating label:hover ~ label {{ color:#f59e0b; }}
+.thumb {{ cursor:pointer; font-size:22px; padding:2px 6px; transition:all .15s; opacity:0.4; user-select:none; }}
+.thumb.active {{ opacity:1; transform:scale(1.15); }}
+.thumb:hover {{ opacity:0.8; }}
 </style>
 <table class="survey-table"><thead><tr><th>Language</th><th>Text</th><th>Audio</th><th>Rate</th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>
 <script>
-function updateRating(id,v){{var el=document.getElementById('ratings-data');var r={{}};try{{r=JSON.parse(el.value||'{{}}')}}catch(e){{}}r[String(id)]=v;el.value=JSON.stringify(r);el.dispatchEvent(new Event('input',{{bubbles:true}}));}}
+function rate(id,v){{var el=document.getElementById('ratings-data');var r={{}};try{{r=JSON.parse(el.value||'{{}}')}}catch(e){{}}var prev=r[String(id)]||0;r[String(id)]=prev===v?0:v;el.value=JSON.stringify(r);document.querySelectorAll('[data-id=\"'+id+'\"]').forEach(function(s){{s.classList.toggle('active',s.getAttribute('onclick').includes(','+r[String(id)]))}});}}
 </script>"""
 
 _NEXT_ID = 0
@@ -4444,10 +4444,11 @@ def submit_ratings(ratings_json, survey):
     submitted = 0
     for e in survey:
         rating_val = ratings.get(str(e["id"]), 0)
-        if rating_val > 0:
+        if rating_val != 0:
+            label = "thumbs_up" if rating_val > 0 else "thumbs_down"
             save_rating(e["lang"], e["text"], e.get("prompt"),
                         e["duration"], _CFG_SCALE, _INF_STEPS,
-                        f"{rating_val}/5", "")
+                        label, "")
             submitted += 1
     return f"Submitted {submitted} rating(s). Thank you!", build_survey_html([]), []
 
@@ -4486,7 +4487,7 @@ with gr.Blocks(title="Ghana TTS") as demo:
     rand_btn.click(on_language_change, inputs=[tag], outputs=[text])
     btn.click(synthesize, inputs=[text, tag, prompt_audio, survey_state], outputs=[audio, status, survey_html, survey_state])
     submit_btn.click(submit_ratings, inputs=[ratings_data, survey_state], outputs=[submit_status, survey_html, survey_state],
-        js="(r, s) => { var ratings={}; document.querySelectorAll('.star-rating input:checked').forEach(function(el) { var id = el.name.split('_')[1]; ratings[id] = parseInt(el.value); }); return [JSON.stringify(ratings), s]; }")
+        js="(r, s) => { var ratings={}; document.querySelectorAll('.thumb.active').forEach(function(el) { var id = el.getAttribute('data-id'); var val = el.classList.contains('thumb-up') ? 1 : -1; ratings[id] = val; }); return [JSON.stringify(ratings), s]; }")
     clear_btn.click(lambda: ("Cleared.", build_survey_html([]), []), outputs=[submit_status, survey_html, survey_state])
     demo.load(on_language_change, inputs=tag, outputs=[text])
     demo.load(on_prompt_change, inputs=tag, outputs=[prompt_audio])

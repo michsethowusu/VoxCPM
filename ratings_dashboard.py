@@ -44,12 +44,17 @@ def load_ratings():
             r = json.loads(line)
             count += 1
             lang = r.get("language", "unknown")
-            rating_str = r.get("rating", "0/5")
-            try:
-                val = int(rating_str.split("/")[0])
-                scores[lang].append(val)
-            except (ValueError, IndexError, AttributeError):
-                pass
+            rating_str = r.get("rating", "")
+            if rating_str == "thumbs_up":
+                scores[lang].append(1)
+            elif rating_str == "thumbs_down":
+                scores[lang].append(0)
+            else:
+                try:
+                    val = int(rating_str.split("/")[0])
+                    scores[lang].append(val / 5)
+                except (ValueError, IndexError, AttributeError):
+                    pass
     return scores, count
 
 def plot_chart():
@@ -65,7 +70,7 @@ def plot_chart():
 
     langs = sorted(scores.keys())
     names = [LANG_NAMES.get(l, l) for l in langs]
-    pcts = [(sum(scores[l]) / (len(scores[l]) * 5)) * 100 for l in langs]
+    pcts = [(sum(scores[l]) / len(scores[l])) * 100 for l in langs]
 
     colors = plt.cm.viridis([p / 100 for p in pcts])
     fig, ax = plt.subplots(figsize=(12, max(6, len(langs) * 0.35)))
@@ -73,7 +78,7 @@ def plot_chart():
     for bar, pct in zip(bars, pcts):
         ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
                 f"{pct:.1f}%", va="center", fontsize=9)
-    ax.set_xlabel("Rating (%)")
+    ax.set_xlabel("Approval Rate (%)")
     ax.set_title(f"TTS Quality by Language (based on {total} ratings)")
     ax.set_xlim(0, 105)
     ax.invert_yaxis()
@@ -89,7 +94,7 @@ def plot_selected(selected):
     pcts = {}
     for l in selected:
         if l in scores:
-            pcts[l] = (sum(scores[l]) / (len(scores[l]) * 5)) * 100
+            pcts[l] = (sum(scores[l]) / len(scores[l])) * 100
     langs = sorted(pcts.keys(), key=lambda l: pcts[l], reverse=True)
     names = [LANG_NAMES.get(l, l) for l in langs]
     vals = [pcts[l] for l in langs]
