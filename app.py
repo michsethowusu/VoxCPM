@@ -4228,10 +4228,30 @@ LANGUAGE_EXAMPLES = {
         "Sekania bu maa ye Semaya.",
         "Amo nɛ we.",
     ],
+    "twi-asante": [
+        "Yesu ka kyerɛɛ wɔn sɛ, Montena adwa mu.",
+        "Asɛm no bɛyɛɛ honam, tenaa yɛn mu.",
+        "Na Onyankopɔn dɔ wiase no sɛ.",
+        "Momma mo ani nnye Awurade mu.",
+        "Aseda nka Onyankopɔn ne hann no.",
+        "Ne dɔ no nni awiee.",
+        "Yɛn Agya a wowɔ soro, wo din ntew.",
+    ],
+    "twi-akuapem": [
+        "Yɛn Agya a wowɔ soro, wo din ntew.",
+        "Wohendom mmra, w'apɛde nyɛ wɔ asase so.",
+        "Ma yɛn nnɛ sika a yɛbɛdi.",
+        "Na fa yɛn ka firi bɔne mu.",
+        "Na wo na ahemfo no wɔ deɛ ɛwɔ soro.",
+        "Yesu Christo na ɔyɛ kwan, nokware ne nkwa no.",
+        "Onyankopɔn dɔ yɛn firi mfiase.",
+    ],
 }
 
 LANG_NAMES = {
     "acd": "Akyode",
+    "twi-asante": "Twi (Asante)",
+    "twi-akuapem": "Twi (Akuapem)",
     "ada": "Dangme",
     "akp": "Siwu",
     "any": "Anyi",
