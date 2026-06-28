@@ -75,14 +75,20 @@ LANGUAGE_EXAMPLES = {
     "bud": [
         "Unimbɔti di kaa báaa? Ní ki náań binib ki duu líì kitiŋ pu. Binibee mà l ki butì pá aaa. U pé e nyáń dalbee, ní ki bí yii u làá yìiǹ kí cɔŋkì u-niboolii gbanti, ní ki kpántì unyaŋgbanti ki níń cá bi-cee. U pé e bí i yìiǹ ki tin kɔ́ ubɔ nì u-nimpuu pu.",
     ],
-    "bwu": [],
     "dag": [
         "Bɛhig' be sokam sanimi, din pa la amii. Suhizɔbo be sokam sani; ka nambɔxu beni. Suhubɔhibo mi bi lan kɔŋ yigunaadam kam sani. Dimbɔŋɔ zaa wuhiya ka di tu kamaata ka ti zaa yu tab' hali ni ti puuni.",
     ],
     "dga": [
         "Nengsaala zaa ba nang dɔge so la o menga, ka o ne o taaba zaa sengtaa noba emmo ane yɛlɛsoobo sobic poɔ. Ba dɔgɛɛ ba zaa ne yɛng ane yɛlɛ-iruu k'a da seng ka ba erɛ yɛlɛ korɔ taa a nga yɔɔmine.",
     ],
-    "en": [],
+    "en": [
+        "Government sitting on US$200m Akufo-Addo left to combat perennial flooding.",
+        "Black Stars suffer 2-1 defeat in Group L at FIFA World Cup 2026.",
+        "Police probe suspected foul play after woman found dead in Somanya.",
+        "Maritime sector key to Ghana\u2019s growth.",
+        "Pupils to recite daily anti-drug messages under intensified government campaign.",
+        "Students now lacing ice cream with weed.",
+    ],
     "ewe": [
         "Wodzi amegbetɔwo katã ablɔɖeviwoe eye wodzena bubu kple gomekpɔkpɔ ɔsɔe. Susu kple dzitsinya le wo dometɔ ɖesiaɖe si eyata wodze be woanɔ anyi le ɖekawɔwɔ blibo me.",
     ],
@@ -114,7 +120,17 @@ LANGUAGE_EXAMPLES = {
         "Mfó nya Yesu lɛtɛyi mǝ nkǝ, 'Lǝ bɛlɛ ola botoo, bɛtɛyi biǝnkǝ, 'Bo Anto, tǝ lǝ bakpasǝ fǝ diye. Fǝ sekadidi lǝ sibǝ. Beyifo lǝ fǝ lelabi ǝsuǝ lǝ kasɔ mfo fe kase inte kato.",
         "Nya lǝ efi bo abua atsyɛ bo, fe kase bo tsya leefi katsyɛ utidi saa wǝ laata bo kebu.",
     ],
-    "maw": [],
+    "maw": [
+        "N\u2019i wunta\u014b\u014ba.",
+        "Ani\u014b wula.",
+        "I ba b\u025b wula?",
+        "I ma b\u025b wula?",
+        "I yuuri boonni la b\u0254?",
+        "B\u0254 n\u014bwa?",
+        "Ka ny\u025b la yiri.",
+        "Ka ny\u025b la tiiya.",
+        "N y\u025bl ka su\u014b\u014baa?",
+    ],
     "mzw": [],
     "naw": [],
     "ncu": [
@@ -152,6 +168,18 @@ LANGUAGE_EXAMPLES = {
     ],
     "twi-akuapem": [
         "Wɔɑwo ɑdesɑmmɑ nyinɑɑ sɛ nnipɑ ɑ wɔwɔ ɑhofɑdi. Wɔn nyinɑɑ wɔ nidi ne kyɛfɑ koro. Wɔwɔ ɔdwene ne ɔhonim, nɑ ɛsɛ sɛ wobu wɔn ho wɔn ho sɛ ɔnuɑnom.",
+    ],
+    "bwu": [
+        "Ka se-aa?",
+        "Nalim nyini.",
+        "Fi yue le boa?",
+        "Ka boa ale nna?",
+        "N baga a maari fu?",
+        "Faa yaali k\u00e1 boa?",
+        "Maa saalim, vongti mu.",
+        "Kan namu.",
+        "Cheng du!",
+        "Jam de!",
     ],
 }
 
