@@ -4361,29 +4361,27 @@ def build_survey_html(survey):
         prompt_label = f" + prompt" if e.get("prompt") and e["prompt"] != "None" else ""
         rid = e["id"]
         sel = e.get("rating", 0)
-        up_active = " active" if sel == 1 else ""
-        down_active = " active" if sel == -1 else ""
         rows.append(
             f"<tr><td><b>{e['lang_name']}</b><br><small>{e['lang']}{prompt_label}</small></td>"
             f"<td style='max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' title='{e['text']}'>{e['text'][:50]}{'…' if len(e['text'])>50 else ''}</td>"
             f"<td style='width:180px;'>{audio_tag}</td>"
             f"<td style='white-space:nowrap; text-align:center;'>"
-            f"<span class='thumb thumb-up{up_active}' onclick='rate({rid},1)' data-id='{rid}'>👍</span>"
-            f"<span class='thumb thumb-down{down_active}' onclick='rate({rid},-1)' data-id='{rid}'>👎</span>"
+            f"<label class='thumb-radio{' active' if sel==1 else ''}'><input type='radio' name='rate_{rid}' value='1' onchange='rate(this)'{' checked' if sel==1 else ''}> 👍</label>"
+            f"<label class='thumb-radio{' active' if sel==-1 else ''}'><input type='radio' name='rate_{rid}' value='-1' onchange='rate(this)'{' checked' if sel==-1 else ''}> 👎</label>"
             f"</td></tr>"
         )
     return f"""
 <style>
 .survey-table td, .survey-table th {{ padding:8px 10px; border-bottom:1px solid #e5e7eb; text-align:left; vertical-align:middle; }}
 .survey-table th {{ background:#f3f4f6; font-weight:600; }}
-.thumb {{ cursor:pointer; font-size:22px; padding:2px 6px; transition:all .15s; opacity:0.4; user-select:none; }}
-.thumb.active {{ opacity:1; transform:scale(1.15); }}
-.thumb:hover {{ opacity:0.8; }}
+.thumb-radio {{ cursor:pointer; font-size:20px; padding:4px 8px; user-select:none; white-space:nowrap; }}
+.thumb-radio.active {{ background:#f0fdf4; border-radius:6px; font-weight:bold; }}
+.thumb-radio input {{ margin-right:3px; cursor:pointer; }}
 </style>
 <table class="survey-table"><thead><tr><th>Language</th><th>Text</th><th>Audio</th><th>Rate</th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table>
 <script>
-function rate(id,v){{var el=document.getElementById('ratings-data');var r={{}};try{{r=JSON.parse(el.value||'{{}}')}}catch(e){{}}var prev=r[String(id)]||0;r[String(id)]=prev===v?0:v;el.value=JSON.stringify(r);document.querySelectorAll('[data-id=\"'+id+'\"]').forEach(function(s){{s.classList.toggle('active',s.getAttribute('onclick').includes(','+r[String(id)]))}});}}
+function rate(el){{var id=el.name.split('_')[1];var v=parseInt(el.value);var r={{}};try{{r=JSON.parse(document.getElementById('ratings-data').value||'{{}}')}}catch(e){{}}r[id]=v;document.getElementById('ratings-data').value=JSON.stringify(r);}}
 </script>"""
 
 _NEXT_ID = 0
@@ -4487,7 +4485,7 @@ with gr.Blocks(title="Ghana TTS") as demo:
     rand_btn.click(on_language_change, inputs=[tag], outputs=[text])
     btn.click(synthesize, inputs=[text, tag, prompt_audio, survey_state], outputs=[audio, status, survey_html, survey_state])
     submit_btn.click(submit_ratings, inputs=[ratings_data, survey_state], outputs=[submit_status, survey_html, survey_state],
-        js="(r, s) => { var ratings={}; document.querySelectorAll('.thumb.active').forEach(function(el) { var id = el.getAttribute('data-id'); var val = el.classList.contains('thumb-up') ? 1 : -1; ratings[id] = val; }); return [JSON.stringify(ratings), s]; }")
+        js="(r, s) => { var ratings={}; document.querySelectorAll('.survey-table input[type=radio]:checked').forEach(function(el) { var id = el.name.split('_')[1]; ratings[id] = parseInt(el.value); }); return [JSON.stringify(ratings), s]; }")
     clear_btn.click(lambda: ("Cleared.", build_survey_html([]), []), outputs=[submit_status, survey_html, survey_state])
     demo.load(on_language_change, inputs=tag, outputs=[text])
     demo.load(on_prompt_change, inputs=tag, outputs=[prompt_audio])
